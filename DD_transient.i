@@ -8,8 +8,8 @@
   Omega = 16.3e-30  # [m^3], atomic volume
   T = 600     # [K], temperature
   burgers = 0.28567e-9 # [m], burger's vector magnitude
-  family = LAGRANGE # for the stress tensor
-  order = FIRST
+  family = MONOMIAL # for the stress tensor
+  order = CONSTANT
 []
 
 [Mesh]
@@ -30,17 +30,17 @@
 #  elem_type = HEX8
 
   type = FileMesh
-  file = './mesh/block.msh'
+  file = './mesh/block_structured1.msh'
   # The MultiAppInterpolationTransfer object only works with ReplicatedMesh
   parallel_type = replicated
   #second_order = true
 []
 
 [AuxVariables]
-#  [./c_fromMaster]
-#    family = LAGRANGE
-#    order = FIRST
-#  [../]
+  [./c_fromMaster]
+    family = LAGRANGE
+    order = FIRST
+  [../]
   [./stress_xx_from]
   [../]
   [./stress_xy_from]

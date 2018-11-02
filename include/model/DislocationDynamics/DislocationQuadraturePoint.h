@@ -298,7 +298,7 @@ namespace model
                         }
                     }
                 }
-                
+
                 // Add other stress contributions, and compute PK force
                 for (auto& qPoint : quadraturePoints())
                 {

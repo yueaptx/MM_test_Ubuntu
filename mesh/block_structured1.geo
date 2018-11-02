@@ -26,8 +26,9 @@ Physical Volume("<interiorName>") = surfaceVector[1];
 
 // Define variables for your parametric mesh 
 squareSide = 2e-6; //m
-meshThickness = squareSide / 10; 
-gridsize = squareSide / 10;
+layerNum = 8;
+meshThickness = squareSide / layerNum; 
+gridsize = squareSide / layerNum;
  
 // All numbering counterclockwise from bottom-left corner
 Point(1) = {-squareSide/2, -squareSide/2, -squareSide/2, gridsize};
@@ -51,7 +52,7 @@ Transfinite Surface {6};
 surfaceVector[] = Extrude {0, 0, squareSide} 
 {
 Surface{6};
-Layers{10};		// create only one layer of elements in the direction of extrusion
+Layers{layerNum};		// create only one layer of elements in the direction of extrusion
 //Recombine;		// recombine triangular mesh to quadrangular mesh
 };
 

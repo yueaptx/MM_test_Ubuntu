@@ -26,21 +26,18 @@ Physical Volume("<interiorName>") = surfaceVector[1];
 
 // Define variables for your parametric mesh 
 squareSide = 2e-6; //m
-meshThickness = squareSide / 10; 
-gridsize = squareSide / 10;
+layerNum = 8;
+meshThickness = squareSide / layerNum; 
+gridsize = squareSide / layerNum;
  
 // All numbering counterclockwise from bottom-left corner
 Point(1) = {-squareSide/2, -squareSide/2, -squareSide/2, gridsize};
 
-pointVector[] = Extrude {squareSide,0,0} {Point{1}; Layers{10};}
+Extrude {squareSide,0,0} {Point{1}; Layers{layerNum};}
 
-Line{1} = pointVector[0];
+Extrude {0,squareSide,0} {Line{1}; Layers{layerNum};}
 
-Extrude {0,squareSide,0} {Line{1}; Layers{10};}
-
-Extrude {0,0,squareSide} {
-    Surface{5}; Layers{10};
-}
+Extrude {0,0,squareSide} {Surface{5}; Layers{layerNum};}
     
 
 /* surfaceVector contains in the following order:
@@ -64,3 +61,9 @@ Physical Surface("back") = {6}; // from Plane Surface (6) ...
 /* On my PC, the file must end with a free line to avoid errors which might come from different control characters in UNIX, Mac and Windows! Just to be save, insert one line below this comment!*/
 
 
+Physical Surface("bottom") = {5};
+Physical Surface("top") = {27};
+Physical Surface("front") = {18};
+Physical Surface("back") = {26};
+Physical Surface("left") = {14};
+Physical Surface("right") = {22};
