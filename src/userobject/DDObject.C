@@ -39,6 +39,7 @@ DDObject::DDObject(const InputParameters & parameters)
     _DN(argc,argv),
     _sys(&_fe_problem.getSystem("c_fromMaster")),
     _var_c(&_fe_problem.getStandardVariable(0, "c_fromMaster")),
+    _stressCompNames(_fe_problem.getVariableNames()),
     // Set our member scalar value from InputParameters (read from the input file)
     _diffusivity(getParam<Real>("diffusivity")),
     _Uvd(getParam<Real>("Uvd")),
@@ -57,18 +58,18 @@ DDObject::DDObject(const InputParameters & parameters)
 void
 DDObject::initialSetup()
 {
-   
  	/*
  	Empty the node vectors
  	*/
  	loopNodes = {};
  	loop0 = {};
 
-	/*
-	Read the variable/auxvarible names
-	*/
-	_stressCompName = _fe_problem.getVariableNames();
-
+	_stressCompNames.erase(_stressCompNames.begin());     // remove the first element which is "c_master"
+	for (const auto & _stressCompName : _stressCompNames)
+	{
+        	_sys_sig.push_back(&_fe_problem.getSystem(_stressCompName));
+        	_var_sig.push_back(&_fe_problem.getStandardVariable(0, _stressCompName));
+	}
 }
 
 void
@@ -86,13 +87,13 @@ DDObject::execute()
     // Run the DDD code
     _DN.runSteps();
     
-    Eigen::Matrix<double, 3, 1> p1 = {0,0,0}; 
+	pointVector p1 = {0,0,0}; 
 	Point p2(p1(0,0), p1(1,0), p1(2,0));
 	
 	/*
 	Read the data from MoDELib
 	*/
-    Eigen::Matrix<double, 3, 3> stress = this->spatialValues(p1);
+    stressMatrix stress = this->spatialValues(p1);
     std::cout << "The stress tensor from MoDELib is : unit[shear modulus]" << std::endl;
     for (int i = 0; i < 3; i++)
 	{
@@ -108,11 +109,24 @@ DDObject::execute()
 	*/
     Number c_field = _sys->point_value(_var_c->number(), p2, false);
 	std::cout << "The concentration at Point " << p2 << " is " << c_field << std::endl;	
+
+    stressMatrix stress_MOOSE;
+    std::cout << "The stress tensor from MOOSE at " << p2 << "is : unit[Pa]" << std::endl;
+    for (int i = 0; i < _dim; i++)
+    {
+        for (int j = 0; j < _dim; j++)
+        {
+            stress_MOOSE(i, j) = _sys_sig[i * _dim + j]->point_value(_var_sig[i * _dim + j]->number(), p2, false);
+            std::cout << stress_MOOSE(i, j) << ", ";
+        }
+        std::cout << std::endl;
+	}
 	
     std::cout << "The DDObject is executed!" << std::endl;
 }
 
-Eigen::Matrix<double, 3, 3> DDObject::spatialValues(const Eigen::Matrix<double, 3, 1> & p)
+DDObject::stressMatrix
+DDObject::spatialValues(const DDObject::pointVector & p)
 {
     return _DN.extStressController.externalStress(p);
 }

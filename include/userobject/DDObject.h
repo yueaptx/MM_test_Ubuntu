@@ -25,16 +25,17 @@ public:
 	virtual void finalize(){}	// Finalize.  This is called _after_ execute() and _after_ threadJoin()!  This is probably where you want to do MPI communication!
 
 	static const unsigned int _dim = 3; 
-
+    typedef Eigen::Matrix<double, _dim, _dim> stressMatrix;
+	typedef Eigen::Matrix<double, _dim, 1> pointVector;
     /**
   	* Optional interface function for "evaluating" a UserObject at a spatial position.
  	* If a UserObject overrides this function that UserObject can then be used in a
  	* Transfer to transfer information from one domain to another.
  	*/
  	//virtual Real spatialValue(const Point & p) const;
-    Eigen::Matrix<double, 3, 3> spatialValues(const Eigen::Matrix<double, 3, 1> & p);
+    Eigen::Matrix<double, _dim, _dim> spatialValues(const Eigen::Matrix<double, _dim, 1> & p);
 	
-	const Real PI = std::acos(-1);
+    const Real PI = std::acos(-1);
 
     /* argc & argv*/
     int argc = 1;
@@ -56,13 +57,15 @@ public:
 protected:
     // Create the DislocationNetwork
     #define ExternalLoadControllerFile "UniformExternalLoadController.h"
-    model::DislocationNetwork<3,0,model::Hermite> _DN;
+    model::DislocationNetwork<_dim,0,model::Hermite> _DN;
     // Pointer to the EquationSystem object
     System * _sys;
+	std::vector<System *> _sys_sig;
     // Pointer to the MooseVariable
     MooseVariable * _var_c;
+	std::vector<MooseVariable *> _var_sig;
     // Vector of variable names
-    std::vector<VariableName> _stressCompName;
+    std::vector<VariableName> _stressCompNames;
     // Vector of nodes in one loop
     std::vector<Point> loopNodes;
     // Vector of velocity magnitude on nodes
