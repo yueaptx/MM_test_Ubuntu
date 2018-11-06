@@ -52,6 +52,15 @@ DDObject::DDObject(const InputParameters & parameters)
     _burgers(getParam<Real>("burgers")),
     _c0(exp(- _Uvf * _eV2J / _kB / _T))
 {
+	//std::cout << "DDobject has been initialized!" << _DN.mooseValues.use_MOOSE << std::endl;
+    //_DN.mooseValues.setDDobject(this);
+	_stressCompNames.erase(_stressCompNames.begin());     // remove the first element which is "c_master"
+	for (const auto & _stressCompName : _stressCompNames)
+	{
+        	_sys_sig.push_back(&_fe_problem.getSystem(_stressCompName));
+        	_var_sig.push_back(&_fe_problem.getStandardVariable(0, _stressCompName));
+	}
+	_DN.mooseValues.setDDobject(_sys_sig, _var_sig);
 }
 
 
@@ -64,12 +73,7 @@ DDObject::initialSetup()
  	loopNodes = {};
  	loop0 = {};
 
-	_stressCompNames.erase(_stressCompNames.begin());     // remove the first element which is "c_master"
-	for (const auto & _stressCompName : _stressCompNames)
-	{
-        	_sys_sig.push_back(&_fe_problem.getSystem(_stressCompName));
-        	_var_sig.push_back(&_fe_problem.getStandardVariable(0, _stressCompName));
-	}
+
 }
 
 void

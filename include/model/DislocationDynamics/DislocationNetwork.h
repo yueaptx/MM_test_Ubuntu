@@ -57,6 +57,7 @@
 #include "GrainBoundaryTransmission.h"
 //#include <model/DislocationDynamics/Polycrystals/GrainBoundaryDissociation.h>
 #include "BVPsolver.h"
+#include "MOOSEvalues.h"
 #include "Polycrystal.h"
 #include "DislocationNodeContraction.h"
 #include "EshelbyInclusion.h"
@@ -76,15 +77,16 @@
 
 namespace model
 {
-    
+
     template <int dim>
     struct DislocationNetworkBase : public GlidePlaneObserver<dim>
     {// Class storing objects that need to be destroyed last
-        
+
         SimplicialMesh<dim> mesh;
         Polycrystal<dim> poly;
         BVPsolver<dim,2> bvpSolver;
-        
+        MOOSEvalues<dim> mooseValues;
+
         DislocationNetworkBase() :
         /* init */ mesh(TextFileParser("inputFiles/DD.txt").readScalar<int>("meshID",true)),
         /* init */ poly("./inputFiles/polycrystal.txt",mesh,*this),
@@ -92,9 +94,9 @@ namespace model
         {
                             assert(mesh.simplices().size() && "MESH IS EMPTY.");
         }
-        
+
     };
-    
+
     template <int _dim, short unsigned int corder, typename InterpolationType>
     class DislocationNetwork : public DislocationNetworkBase<_dim>, // must be first in inheritance tree
 //    /* base                 */ public GlidePlaneObserver<_dim>,
@@ -102,9 +104,9 @@ namespace model
     /* base                 */ public ParticleSystem<DislocationParticle<_dim> >,
     /* base                 */ public std::map<size_t,EshelbyInclusion<_dim>>
     {
-        
+
     public:
-        
+
         static constexpr int dim=_dim; // make dim available outside class
         typedef DislocationNetwork<dim,corder,InterpolationType> DislocationNetworkType;
         typedef LoopNetwork<DislocationNetworkType> LoopNetworkType;
@@ -132,13 +134,13 @@ namespace model
         typedef std::map<size_t,EshelbyInclusion<_dim>> EshelbyInclusionContainerType;
         typedef NetworkLinkObserver<LinkType> NetworkLinkObserverType;
         typedef typename NetworkLinkObserverType::LinkContainerType NetworkLinkContainerType;
-        
+
 #ifdef DislocationNucleationFile
 #include DislocationNucleationFile
 #endif
-        
+
     private:
-        
+
         /**********************************************************************/
         void updateLoadControllers()
         {/*! Updates bvpSolver using the stress and displacement fields of the
@@ -158,26 +160,26 @@ namespace model
                 extStressController.update(*this);
             }
         }
-        
+
         /**********************************************************************/
         void computeNodaVelocities()
         {
-            
+
             switch (timeIntegrationMethod)
             {
                 case 0:
                     DDtimeIntegrator<0>::computeNodaVelocities(*this);
                     break;
-                    
+
                     //                case 1:
                     //                    dt=DDtimeIntegrator<1>::integrate(*this);
                     //                    break;
-                    
+
                 default:
                     assert(0 && "time integration method not implemented");
                     break;
             }
-            
+
             //            if(NodeType::use_velocityFilter)
             //            {
             //                assert(0 && "velocityFilter not implemented yet.");
@@ -186,13 +188,13 @@ namespace model
             //                //                node.second->applyVelocityFilter(vMax);
             //                //            }
             //            }
-            
-            
+
+
             model::cout<<std::setprecision(3)<<std::scientific<<"		dt="<<dt<<std::endl;
         }
-        
 
-        
+
+
         /**********************************************************************/
         void singleStep()
         {
@@ -205,22 +207,22 @@ namespace model
             /*                    */<< ", loops="<<this->loops().size()
             /*                    */<< ", components="<<this->components().size()
             /*                    */<< defaultColor<<std::endl;
-            
+
             //! 1- Check that all nodes are balanced
             //            checkBalance();
-            
+
             //! 2 - Update quadrature points
             updateQuadraturePoints();
-            
+
             for(auto& loop : this->loops()) // TODO: PARALLELIZE THIS LOOP
             {// copmute slipped areas and right-handed normal
                 loop.second->update();
             }
             updatePlasticDistortionFromAreas();
-            
+
             //! 3- Calculate BVP correction
             updateLoadControllers();
-            
+
 #ifdef DislocationNucleationFile
             if(use_bvp && !(runID%use_bvp))
             {
@@ -228,83 +230,83 @@ namespace model
                 updateQuadraturePoints();
             }
 #endif
-            
+
             computeNodaVelocities();
-            
-            
+
+
             //! 4- Solve the equation of motion
-            
-            
+
+
             //! 5- Compute time step dt (based on max nodal velocity) and increment totalTime
             // make_dt();
-            
+
             if(outputElasticEnergy)
             {
                 typedef typename DislocationParticleType::ElasticEnergy ElasticEnergy;
                 this->template computeNeighborField<ElasticEnergy>();
             }
-            
+
             //! 6- Output the current configuration before changing it
             //            output(runID);
             io().output(runID);
-            
-            
+
+
             //! 7- Moves DislocationNodes(s) to their new configuration using stored velocity and dt
             move(dt);
-            
+
             //! 8- Update accumulated quantities (totalTime and plasticDistortion)
             totalTime+=dt;
             updatePlasticDistortionRateFromVelocities();
-            
-            
+
+
             //! 9- Contract segments of zero-length
             //            DislocationNetworkRemesh<DislocationNetworkType>(*this).contract0chordSegments();
-            
+
             //! 10- Cross Slip (needs upated PK force)
             DislocationCrossSlip<DislocationNetworkType>(*this);
-            
-            
+
+
             //                        GrainBoundaryTransmission<DislocationNetworkType>(*this).transmit();
             GrainBoundaryTransmission<DislocationNetworkType>(*this).directTransmit();
-            
+
             //
             //            GrainBoundaryDissociation<DislocationNetworkType>(*this).dissociate();
-            
+
             //            poly.reConnectGrainBoundarySegments(*this); // this makes stressGauss invalid, so must follw other GB operations
-            
-            
+
+
             //! 11- detect loops that shrink to zero and expand as inverted loops
             //            DislocationNetworkRemesh<DislocationNetworkType>(*this).loopInversion(dt);
-            
+
             //! 12- Form Junctions
             DislocationJunctionFormation<DislocationNetworkType>(*this).formJunctions(maxJunctionIterations,DDtimeIntegrator<0>::dxMax);
-            
+
             //            // Remesh may contract juncitons to zero lenght. Remove those juncitons:
             //            DislocationJunctionFormation<DislocationNetworkType>(*this).breakZeroLengthJunctions();
-            
+
             //! 13- Node redistribution
             DislocationNetworkRemesh<DislocationNetworkType>(*this).remesh(runID);
-            
+
             //mergeLoopsAtNodes();
-            
+
             //            DislocationInjector<DislocationNetworkType>(*this).insertRandomStraightDislocation();
-            
+
             //! 9- Contract segments of zero-length
             //            DislocationNetworkRemesh<DislocationNetworkType>(*this).contract0chordSegments();
-            
+
             //! 14- If BVP solver is not used, remove DislocationSegment(s) that exited the boundary
             //            removeBoundarySegments();
-            
+
             //            removeSmallComponents(3.0*dx,4);
-            
+
             //            make_bndNormals();
-            
+
             //! 16 - Increment runID counter
             ++runID;     // increment the runID counter
         }
-        
+
     public:
-        
+
         int timeIntegrationMethod;
         int maxJunctionIterations;
         long int runID;
@@ -321,6 +323,7 @@ namespace model
         int crossSlipModel;
         bool use_boundary;
         unsigned int use_bvp;
+        unsigned int use_MOOSE;
         bool use_virtualSegments;
         bool use_externalStress;
         bool use_extraStraightSegments;
@@ -350,7 +353,7 @@ namespace model
         std::vector<VectorDim,Eigen::aligned_allocator<VectorDim>> periodicShifts;
         bool computePlasticDistortionIncrementally;
         std::string folderSuffix;
-        
+
         /**********************************************************************/
         DislocationNetwork(int& argc, char* argv[]) :
         /* init */ timeIntegrationMethod(TextFileParser("inputFiles/DD.txt").readScalar<int>("timeIntegrationMethod",true))
@@ -369,6 +372,7 @@ namespace model
         /* init */ crossSlipModel(TextFileParser("inputFiles/DD.txt").readScalar<int>("crossSlipModel",true)),
         /* init */ use_boundary(true),
         /* init */ use_bvp(TextFileParser("inputFiles/DD.txt").readScalar<int>("use_bvp",true)),
+        /* init */ use_MOOSE(TextFileParser("inputFiles/DD.txt").readScalar<int>("use_MOOSE",true)),
         /* init */ use_virtualSegments(TextFileParser("inputFiles/DD.txt").readScalar<int>("use_virtualSegments",true)),
         /* init */ use_externalStress(false),
         /* init */ use_extraStraightSegments(false),
@@ -396,7 +400,7 @@ namespace model
         /* init */ computePlasticDistortionIncrementally(TextFileParser("inputFiles/DD.txt").readScalar<int>("computePlasticDistortionIncrementally",true)),
         /* init */ folderSuffix("")
         {
-            
+
             // Some sanity checks
             assert(Nsteps>=0 && "Nsteps MUST BE >= 0");
 
@@ -411,8 +415,8 @@ namespace model
             DislocationDisplacement<dim>::use_multipole=TextFileParser("inputFiles/DD.txt").readScalar<double>("use_DisplacementMultipole",true);
             DislocationStress<dim>::use_multipole=TextFileParser("inputFiles/DD.txt").readScalar<double>("use_StressMultipole",true);
             DislocationEnergy<dim>::use_multipole=TextFileParser("inputFiles/DD.txt").readScalar<double>("use_EnergyMultipole",true);
-            
-            
+
+
 //            EDR.readScalarInFile(fullName.str(),"use_DisplacementMultipole",DislocationDisplacement<dim>::use_multipole);
 //            EDR.readScalarInFile(fullName.str(),"use_StressMultipole",DislocationStress<dim>::use_multipole);
 //            EDR.readScalarInFile(fullName.str(),"use_EnergyMultipole",DislocationEnergy<dim>::use_multipole);
@@ -435,19 +439,19 @@ namespace model
             {
                 StochasticForceGenerator::init(stochasticForceSeed);
             }
-            
+
             if(argc>1)
             {
                 folderSuffix=argv[1];
                 std::cout<<"folderSuffix="<<folderSuffix<<std::endl;
             }
-            
-            ParticleSystemType::initMPI(argc,argv);
-            
 
-            
-            
-            
+            ParticleSystemType::initMPI(argc,argv);
+
+
+
+
+
             if(outputPlasticDistortion)
             {
                 _userOutputColumn+=9;
@@ -456,15 +460,15 @@ namespace model
             {
                 _userOutputColumn+=9;
             }
-            
+
             if(outputDislocationLength)
             {
                 _userOutputColumn+=4;
             }
-            
+
             // IO
             io().read("./","DDinput.txt");
-            
+
             // Set up periodic shifts
             const VectorDim meshDimensions(use_boundary? (this->mesh.xMax()-this->mesh.xMin()).eval() : VectorDim::Zero());
             model::cout<<"meshDimensions="<<meshDimensions.transpose()<<std::endl;
@@ -476,7 +480,7 @@ namespace model
                     {
                         const Eigen::Array<int,dim,1> cellID((Eigen::Array<int,dim,1>()<<i,j,k).finished());
                         periodicShifts.push_back((meshDimensions.array()*cellID.template cast<double>()).matrix());
-                        
+
                     }
                 }
             }
@@ -484,19 +488,19 @@ namespace model
             for(const auto& shift : periodicShifts)
             {
                 model::cout<<shift.transpose()<<std::endl;
-                
+
             }
-            
-            
+
+
             // Initializing configuration
             move(0.0);	// initial configuration
         }
-        
+
 //        const VectorDim periodicVector(const Eigen::Array<int,dim,1>& cellID) const
 //        {
 //            return (meshDimensions.array()*cellID.template cast<double>()).matrix();
 //        }
-        
+
         /**********************************************************************/
         const EshelbyInclusionContainerType& eshelbyInclusions() const
         {
@@ -508,21 +512,21 @@ namespace model
             return *this;
         }
 
-        
+
         /**********************************************************************/
         bool contract(std::shared_ptr<NodeType> nA,
                       std::shared_ptr<NodeType> nB)
         {
             return DislocationNodeContraction<DislocationNetworkType>(*this).contract(nA,nB);
         }
-        
+
         /**********************************************************************/
         const double& get_dt() const
         {/*!\returns the current time step increment dt
           */
             return dt;
         }
-        
+
         /**********************************************************************/
         void set_dt(const double& dt_in,const double& vMax_in)
         {/*!\param[in] dt_in
@@ -531,14 +535,14 @@ namespace model
             dt=dt_in;
             vMax=vMax_in;
         }
-        
+
         /**********************************************************************/
         const double& get_totalTime() const
         {/*! The elapsed simulation time step in dimensionless units
           */
             return totalTime;
         }
-        
+
         /**********************************************************************/
         void assembleAndSolve()
         {/*! Performs the following operatons:
@@ -548,15 +552,15 @@ namespace model
 #else
             const size_t nThreads = 1;
 #endif
-            
+
             //! -1 Compute the interaction StressField between dislocation particles
-            
-            
+
+
             if(corder==0)
             {// For straight segments use analytical expression of stress field
                 const auto t0= std::chrono::system_clock::now();
                 model::cout<<"		Collecting StressStraight objects: "<<std::flush;
-                
+
                 std::deque<StressStraight<dim>,Eigen::aligned_allocator<StressStraight<dim>>> straightSegmentsDeq;
                 size_t currentSize=0;
                 if(computeDDinteractions)
@@ -565,46 +569,46 @@ namespace model
                     {
                         link.second->addToStressStraight(straightSegmentsDeq);
                     }
-                    
+
                     currentSize=straightSegmentsDeq.size();
-                    
+
                     const VectorDim meshSize(this->mesh.xMax()-this->mesh.xMin());
-                    
+
                     for(int i=-dislocationImages_x;i<=dislocationImages_x;++i)
                     {
                         for(int j=-dislocationImages_y;j<=dislocationImages_y;++j)
                         {
                             for(int k=-dislocationImages_z;k<=dislocationImages_z;++k)
                             {
-                                
+
                                 const Eigen::Matrix<int,3,1> cellID((Eigen::Matrix<int,3,1>()<<i,j,k).finished());
-                                
+
                                 if( cellID.squaredNorm()!=0) //skip current cell
                                 {
                                     for (size_t c=0;c<currentSize;++c)
                                     {
                                         const VectorDim P0=straightSegmentsDeq[c].P0+(meshSize.array()*cellID.cast<double>().array()).matrix();
                                         const VectorDim P1=straightSegmentsDeq[c].P1+(meshSize.array()*cellID.cast<double>().array()).matrix();
-                                        
+
                                         straightSegmentsDeq.emplace_back(P0,P1,straightSegmentsDeq[c].b);
                                     }
                                 }
                             }
                         }
                     }
-                    
-                    
+
+
                 }
                 model::cout<< straightSegmentsDeq.size()<<" straight segments ("<<currentSize<<"+"<<straightSegmentsDeq.size()-currentSize<<" images)"<<std::flush;
                 model::cout<<magentaColor<<std::setprecision(3)<<std::scientific<<" ["<<(std::chrono::duration<double>(std::chrono::system_clock::now()-t0)).count()<<" sec]."<<defaultColor<<std::endl;
-                
+
                 const auto t1= std::chrono::system_clock::now();
                 model::cout<<"		Computing analytical stress field at quadrature points ("<<nThreads<<" threads) "<<std::flush;
 #ifdef _OPENMP
                 //                const size_t nThreads = omp_get_max_threads();
                 EqualIteratorRange<typename NetworkLinkContainerType::iterator> eir(this->links().begin(),this->links().end(),nThreads);
 //                SOMETHING WRONG HERE? CPU USE SAYS 100% ONLY?
-                
+
 #pragma omp parallel for
                 for(size_t thread=0;thread<eir.size();thread++)
                 {
@@ -620,12 +624,12 @@ namespace model
                 }
 #endif
                 model::cout<<magentaColor<<std::setprecision(3)<<std::scientific<<" ["<<(std::chrono::duration<double>(std::chrono::system_clock::now()-t1)).count()<<" sec]."<<defaultColor<<std::endl;
-                
-                
-                
-                
-                
-                
+
+
+
+
+
+
                 //#ifdef _OPENMP
                 //#pragma omp parallel for
                 //#endif
@@ -641,17 +645,17 @@ namespace model
             else
             {// For curved segments use quandrature integration of stress field
 //                assert(0 && "RE-ENABLE THIS. New Material class is incompatible with old implmentation using static objects");
-                
+
                 const auto t0= std::chrono::system_clock::now();
-                
+
                 if(computeDDinteractions)
                 {
-                    
+
                     if(dislocationImages_x!=0 || dislocationImages_y!=0 || dislocationImages_z!=0)
                     {
                         assert(0 && "FINISH HERE");
                     }
-                    
+
                     model::cout<<"		Computing numerical stress field at quadrature points ("<<nThreads<<" threads)..."<<std::flush;
                     if (use_extraStraightSegments)
                     {
@@ -663,7 +667,7 @@ namespace model
                     }
                     model::cout<<magentaColor<<std::setprecision(3)<<std::scientific<<" ["<<(std::chrono::duration<double>(std::chrono::system_clock::now()-t0)).count()<<" sec]."<<defaultColor<<std::endl;
                 }
-                
+
                 //! -2 Loop over DislocationSegments and assemble stiffness matrix and force vector
                 const auto t1= std::chrono::system_clock::now();
                 model::cout<<"		Computing segment stiffness matrices and force vectors ("<<nThreads<<" threads)..."<<std::flush;
@@ -671,16 +675,16 @@ namespace model
                 LinkMemberFunctionPointerType Lmfp(&LinkType::assemble); // Lmfp is a member function pointer to Link::assemble
                 this->parallelExecute(Lmfp);
                 model::cout<<magentaColor<<std::setprecision(3)<<std::scientific<<" ["<<(std::chrono::duration<double>(std::chrono::system_clock::now()-t1)).count()<<" sec]."<<defaultColor<<std::endl;
-                
-                
+
+
             }
-            
+
             //! -3 Loop over DislocationSubNetworks, assemble subnetwork stiffness matrix and force vector, and solve
             const auto t2= std::chrono::system_clock::now();
             model::cout<<"		Assembling NetworkComponents and solving "<<std::flush;
-            
-            
-            
+
+
+
             switch (ddSolverType)
             {
                 case 1: // iterative solver
@@ -702,7 +706,7 @@ namespace model
 #endif
                     break;
                 }
-                    
+
                 case 2: // direct solver
                 {
 #ifdef _MODEL_PARDISO_SOLVER_
@@ -730,7 +734,7 @@ namespace model
 #endif
                     break;
                 }
-                    
+
                 default: // lumped solver
                 {
                     model::cout<<"(lumpedSolver "<<nThreads<<" threads)..."<<std::flush;
@@ -751,7 +755,7 @@ namespace model
                     break;
                 }
             }
-            
+
             //            if(DislocationNetworkComponentType::use_directSolver)
             //            {
             //
@@ -761,10 +765,10 @@ namespace model
             //            {
             //
             //            }
-            
+
             model::cout<<magentaColor<<std::setprecision(3)<<std::scientific<<" ["<<(std::chrono::duration<double>(std::chrono::system_clock::now()-t2)).count()<<" sec]."<<defaultColor<<std::endl;
         }
-        
+
         /**********************************************************************/
         void updateQuadraturePoints()
         {
@@ -772,10 +776,10 @@ namespace model
             {// quadrature points only used for curved segments
                 model::cout<<"		Updating quadrature points... "<<std::flush;
                 const auto t0=std::chrono::system_clock::now();
-                
+
                 // Clear DislocationParticles
                 this->clearParticles(); // this also destroys all cells
-                
+
                 // Populate DislocationParticles
                 for(auto& linkIter : this->links())
                 {
@@ -784,8 +788,8 @@ namespace model
                 model::cout<<magentaColor<<" ["<<(std::chrono::duration<double>(std::chrono::system_clock::now()-t0)).count()<<" sec]"<<defaultColor<<std::endl;
             }
         }
-        
-        
+
+
         /**********************************************************************/
         void move(const double & dt_in)
         {/*! Moves all nodes in the DislocationNetwork using the stored velocity and current dt
@@ -798,7 +802,7 @@ namespace model
             }
             model::cout<<magentaColor<<std::setprecision(3)<<std::scientific<<" ["<<(std::chrono::duration<double>(std::chrono::system_clock::now()-t0)).count()<<" sec]."<<defaultColor<<std::endl;
         }
-        
+
         /**********************************************************************/
         void runSteps()
         {/*! Runs Nsteps simulation steps
@@ -814,7 +818,7 @@ namespace model
             updateQuadraturePoints(); // necessary if quadrature data are necessary in main
             model::cout<<greenBoldColor<<std::setprecision(3)<<std::scientific<<Nsteps<< " simulation steps completed in "<<(std::chrono::duration<double>(std::chrono::system_clock::now()-t0)).count()<<" [sec]"<<defaultColor<<std::endl;
         }
-        
+
         /**********************************************************************/
         void updatePlasticDistortionRateFromVelocities()
         {
@@ -828,7 +832,7 @@ namespace model
                 _plasticDistortionFromVelocities += _plasticDistortionRateFromVelocities*dt;
             }
         }
-        
+
         /**********************************************************************/
         void updatePlasticDistortionFromAreas()
         {
@@ -843,19 +847,19 @@ namespace model
                 _plasticDistortionRateFromAreas=(_plasticDistortionFromAreas-old)/dt;
             }
         }
-        
+
         /**********************************************************************/
         const MatrixDimD& plasticDistortionRate() const
         {
             return computePlasticDistortionIncrementally? _plasticDistortionRateFromVelocities : _plasticDistortionRateFromAreas;
         }
-        
+
         /**********************************************************************/
         const MatrixDimD& plasticDistortion() const
         {
             return computePlasticDistortionIncrementally? _plasticDistortionFromVelocities : _plasticDistortionFromAreas;
         }
-        
+
         /**********************************************************************/
         MatrixDimD plasticStrainRate() const
         {/*!\returns the plastic distortion rate tensor generated by this
@@ -864,7 +868,7 @@ namespace model
             //const MatrixDimD temp(plasticDistortionRate());
             return (plasticDistortionRate()+plasticDistortionRate().transpose())*0.5;
         }
-        
+
         /**********************************************************************/
         std::tuple<double,double,double,double> networkLength() const
         {/*!\returns the total line length of the DislocationNetwork. The return
@@ -877,7 +881,7 @@ namespace model
             double bulkSessileLength(0.0);
             double boundaryLength(0.0);
             double grainBoundaryLength(0.0);
-            
+
             for(auto& loop : this->loops())
             {
                 for(const auto& loopLink : loop.second->links())
@@ -906,9 +910,9 @@ namespace model
                     }
                 }
             }
-            
+
 //
-//            
+//
 //            for (const auto& linkIter : this->links())
 //            {
 //                const double temp(linkIter.second->arcLength());
@@ -925,28 +929,28 @@ namespace model
 //                    else
 //                    {
 //                        bulkGlissileLength+=temp;
-//                        
+//
 //                    }
 //                }
-//                
+//
 //            }
             return std::make_tuple(bulkGlissileLength,bulkSessileLength,boundaryLength,grainBoundaryLength);
         }
-        
+
         /**********************************************************************/
         const long int& runningID() const
         {/*! The current simulation step ID.
           */
             return runID;
         }
-        
-        
+
+
         /**********************************************************************/
         const unsigned int& userOutputColumn()  const
         {
             return _userOutputColumn;
         }
-        
+
         /**********************************************************************/
         MatrixDimD stress(const VectorDim& P) const
         {/*!\param[in] P position vector
@@ -954,14 +958,14 @@ namespace model
           *
           * Note:
           */
-            
+
             assert(false && "REWORK THIS FOR STRAIGHT SEGMENTS");
-            
+
             SingleFieldPoint<StressField> fieldPoint(P,true);
             this->template computeField<SingleFieldPoint<StressField>,StressField>(fieldPoint);
             return fieldPoint.field();
         }
-        
+
         /**********************************************************************/
         std::pair<bool,const Simplex<dim,dim>*> pointIsInsideMesh(const VectorDim& P0, const Simplex<dim,dim>* const guess) const
         {/*!\param[in] P0 position vector
@@ -975,34 +979,32 @@ namespace model
             }
             return temp;
         }
-        
+
         /**********************************************************************/
         const ParticleSystemType& particleSystem() const
         {
             return *this;
         }
-        
+
         /**********************************************************************/
         ParticleSystemType& particleSystem()
         {
             return *this;
         }
-        
+
         /**********************************************************************/
         DislocationNetworkIOType io()
         {
             return DislocationNetworkIOType(*this,folderSuffix);
         }
-        
+
         /**********************************************************************/
         DislocationNetworkIOType io() const
         {
             return DislocationNetworkIOType(*this,folderSuffix);
         }
-        
+
     };
-    
+
 }
 #endif
-
-

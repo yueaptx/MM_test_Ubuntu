@@ -17,9 +17,9 @@ namespace model
     template<int dim,int corder>
     struct DislocationQuadraturePoint
     {
-        
+
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-        
+
         static constexpr int Ncoeff= SplineBase<dim,corder>::Ncoeff;
         static constexpr int pOrder= SplineBase<dim,corder>::pOrder;
         static constexpr int Ndof= SplineBase<dim,corder>::Ndof;
@@ -30,7 +30,7 @@ namespace model
         typedef Eigen::Matrix<double,Ncoeff,dim> MatrixNcoeffDim;
         typedef   QuadratureDynamic<1,UniformOpen,1,2,3,4,5,6,7,8,16,32,64,128,256,512,1024> QuadratureDynamicType;
         typedef QuadPowDynamic<pOrder,UniformOpen,1,2,3,4,5,6,7,8,16,32,64,128,256,512,1024> QuadPowDynamicType;
-        
+
         const size_t sourceID;
         const size_t sinkID;
         const int qID;
@@ -40,11 +40,11 @@ namespace model
         const double j;                             // jacobian dl/du
         const VectorDim rl;                         // unit tangent dr/dl
         const double dL;                            // line length corresponding to this quadrature point
-        
+
         MatrixDim stress;
         VectorDim pkForce;
         VectorDim glideVelocity;
-        
+
         /**********************************************************************/
         MatrixDimNdof SFgaussEx() const
         { /*! The MatrixDimNdof matrix of shape functions at the k-th quadrature point
@@ -56,7 +56,7 @@ namespace model
             }
             return temp;
         }
-        
+
         /**********************************************************************/
         template<typename LinkType>
         static VectorDim  getGlideVelocity(const LinkType& seg,
@@ -69,7 +69,7 @@ namespace model
             VectorDim n(seg.glidePlaneNormal()); // plane normal
             VectorDim b(seg.burgers()); // Burgers vector
             VectorDim t(rl);            // tangent vector
-            
+
             // Select right-handed normal whenever possible
             if(seg.loopLinks().size()==1)
             {// pick right-handed normal for n
@@ -83,10 +83,10 @@ namespace model
                     }
                 }
             }
-            
+
             VectorDim glideForce = fPK-fPK.dot(n)*n;
             double glideForceNorm(glideForce.norm());
-            
+
             if(glideForceNorm<FLT_EPSILON && seg.network().use_stochasticForce)
             {
                 glideForce=seg.chord().cross(n);
@@ -96,7 +96,7 @@ namespace model
                     glideForce/=glideForceNorm;
                 }
             }
-            
+
             VectorDim vv=VectorDim::Zero();
             if(glideForceNorm>FLT_EPSILON)
             {
@@ -108,20 +108,20 @@ namespace model
                                                                 dL,
                                                                 seg.network().get_dt(),
                                                                 seg.network().use_stochasticForce);
-                
-                
+
+
                 assert((seg.network().use_stochasticForce || v>= 0.0) && "Velocity must be a positive scalar");
                 const bool useNonLinearVelocity=true;
                 if(useNonLinearVelocity && v>FLT_EPSILON)
                 {
                     v= 1.0-std::exp(-v);
                 }
-                
+
                 vv= v * glideForce/glideForceNorm;
             }
             return vv;
         }
-        
+
         /**********************************************************************/
         template<typename LinkType>
         DislocationQuadraturePoint(const LinkType& seg,
@@ -141,9 +141,9 @@ namespace model
         /* init */,pkForce(VectorDim::Zero())
         /* init */,glideVelocity(VectorDim::Zero())
         {
-            
+
         }
-        
+
         /**********************************************************************/
         template<typename LinkType>
         void updateForcesAndVelocities(const LinkType& seg)
@@ -151,13 +151,13 @@ namespace model
             pkForce=(stress*seg.burgers()).cross(rl);
             glideVelocity=getGlideVelocity(seg,pkForce,stress,rl,dL);
         }
-        
-        
+
+
     };
-    
+
     template<int dim,int corder>
     class DislocationQuadraturePointContainer : public std::deque<DislocationQuadraturePoint<dim,corder>>
-    
+
     {
         static constexpr int Ncoeff= SplineBase<dim,corder>::Ncoeff;
         static constexpr int Ndof= SplineBase<dim,corder>::Ndof;
@@ -173,7 +173,7 @@ namespace model
         typedef Eigen::Matrix<double,Ncoeff,dim> MatrixNcoeffDim;
         typedef typename DislocationQuadraturePointType::QuadratureDynamicType QuadratureDynamicType;
         typedef typename DislocationQuadraturePointType::QuadPowDynamicType QuadPowDynamicType;
-        
+
         /**********************************************************************/
         VectorNdof nodalVelocityLinearKernel(const int& k) const
         { /*!@param[in] k the current quadrature point
@@ -181,7 +181,7 @@ namespace model
            */
             return quadraturePoint(k).SFgaussEx().transpose()*quadraturePoint(k).glideVelocity*quadraturePoint(k).j;
         }
-        
+
         /**********************************************************************/
         MatrixNdof nodalVelocityBilinearKernel(const int& k) const
         { /*! @param[in] k the current quadrature point
@@ -193,7 +193,7 @@ namespace model
             const MatrixDimNdof SFEx(quadraturePoint(k).SFgaussEx());
             return SFEx.transpose()*SFEx*quadraturePoint(k).j;
         }
-        
+
         /**********************************************************************/
         VectorDim pkKernel(const int& k) const
         { /*!@param[in] k the current quadrature point
@@ -202,23 +202,23 @@ namespace model
            */
             return quadraturePoint(k).pkForce*quadraturePoint(k).j;
         }
-        
+
         /**********************************************************************/
         VectorDim glideVelocityKernel(const int& k) const
         {
             return quadraturePoint(k).glideVelocity*this->quadraturePoint(k).j;
         }
-        
+
     public:
-        
+
         /**********************************************************************/
         template<typename LinkType>
         void updateGeometry(const LinkType& seg,
                             const double& quadPerLength)
         {
-            
+
             this->clear();
-            
+
             if(    !seg.hasZeroBurgers()
                &&  !seg.isBoundarySegment()
                &&  !seg.isSessile())
@@ -232,25 +232,25 @@ namespace model
                 }
             }
         }
-        
+
         /**********************************************************************/
         const DislocationQuadraturePointContainerType& quadraturePoints() const
         {
             return *this;
         }
-        
+
         /**********************************************************************/
         DislocationQuadraturePointContainerType& quadraturePoints()
         {
             return *this;
         }
-        
+
         /**********************************************************************/
         const DislocationQuadraturePointType& quadraturePoint(const int& k) const
         {
             return this->operator[](k);
         }
-        
+
         /**********************************************************************/
         template<typename LinkType>
         void updateForcesAndVelocities(const LinkType& seg,
@@ -258,7 +258,7 @@ namespace model
                                        const std::deque<StressStraight<dim>,Eigen::aligned_allocator<StressStraight<dim>>>& straightSegmentsDeq)
         {
             updateGeometry(seg,quadPerLength);
-            
+
             if(this->size())
             {
                 // Compute stress of straightSegmentsDeq
@@ -268,10 +268,10 @@ namespace model
                 {
                     SegmentSegmentDistance<dim> ssd(ss.P0,ss.P1,
                                                     seg.source->get_P(),seg.sink->get_P());
-                    
+
                     //                        const double dr(ssd.dMin/(L0+ss.length));
                     const double dr(ssd.dMin/(L0));
-                    
+
                     if(dr<10.0)
                     {// full interaction
                         for (auto& qPoint : quadraturePoints())
@@ -307,19 +307,27 @@ namespace model
                     {
                         qPoint.stress += seg.network().extStressController.externalStress(qPoint.r);
                     }
-                    
+
                     // Add BVP stress
                     if(seg.network().use_bvp)
                     {
                         qPoint.stress += seg.network().bvpSolver.stress(qPoint.r,seg.source->includingSimplex());
                     }
-                    
+
+                    // Add MOOSE stress
+                    if(seg.network().use_MOOSE)
+                    {
+                        Eigen::Matrix<double, 3, 1> p1 = {0,0,0};
+                        Point p2(p1(0,0), p1(1,0), p1(2,0));
+                        seg.network().mooseValues.stress(p2);
+                    }
+
                     // Add GB stress
                     for(const auto& sStraight : seg.network().poly.grainBoundaryDislocations() )
                     {
                         qPoint.stress += sStraight.stress(qPoint.r);
                     }
-                    
+
                     // Add EshelbyInclusions stress
                     for(const auto& inclusion : seg.network().eshelbyInclusions() )
                     {
@@ -328,12 +336,12 @@ namespace model
                             qPoint.stress += inclusion.second.stress(qPoint.r-shift);
                         }
                     }
-                    
+
                     qPoint.updateForcesAndVelocities(seg);
                 }
             }
         }
-        
+
         /**********************************************************************/
         VectorNdof nodalVelocityVector() const
         { /*\returns The segment-integrated nodal velocity vector int N^T*v dL
@@ -342,7 +350,7 @@ namespace model
             QuadratureDynamicType::integrate(this->size(),this,Fq,&DislocationQuadraturePointContainerType::nodalVelocityLinearKernel);
             return Fq;
         }
-        
+
         /**********************************************************************/
         template<typename LinkType>
         MatrixNdof nodalVelocityMatrix(const LinkType& seg) const
@@ -366,7 +374,7 @@ namespace model
             }
             return Kqq;
         }
-        
+
         /*************************************************************/
         VectorDim glideVelocityIntegral() const
         {/*!\returns The integral of the glide velocity over the segment.
@@ -375,7 +383,7 @@ namespace model
             QuadratureDynamicType::integrate(this->quadraturePoints().size(),this,V,&DislocationQuadraturePointContainerType::glideVelocityKernel);
             return V;
         }
-        
+
         /**********************************************************************/
         VectorDim pkIntegral() const
         {/*!\returns The integral of the PK force over the segment.
@@ -384,15 +392,15 @@ namespace model
             QuadratureDynamicType::integrate(this->quadraturePoints().size(),this,F,&DislocationQuadraturePointContainerType::pkKernel);
             return F;
         }
-        
+
         //        /**********************************************************************/
         //        double arcLength() const
         //        {
         //            return SplineSegmentType::template arcLength<16,UniformOpen>();
         //        }
-        
-        
+
+
     };
-    
+
 }
 #endif
