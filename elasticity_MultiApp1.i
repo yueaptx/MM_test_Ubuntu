@@ -198,7 +198,7 @@
   #type = Steady
   type = Transient
   #end_time = 5e-5            # the simulation will end at t=5
-  num_steps = 10
+  num_steps = 20
   dt = 1e-4
   solve_type = 'PJFNK'
   #solve_type = 'NEWTON'

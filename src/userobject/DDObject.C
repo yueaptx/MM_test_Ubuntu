@@ -97,6 +97,7 @@ DDObject::execute()
 	/*
 	Read the data from MoDELib
 	*/
+    /*
     stressMatrix stress = this->spatialValues(p1);
     std::cout << "The stress tensor from MoDELib is : unit[shear modulus]" << std::endl;
     for (int i = 0; i < 3; i++)
@@ -107,7 +108,7 @@ DDObject::execute()
 		}
 		std::cout << std::endl;	
 	} 
-
+     */	
 	/*
 	Read the data from MOOSE
 	*/

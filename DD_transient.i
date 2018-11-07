@@ -74,7 +74,7 @@
 
 [Executioner]
   type = Transient
-  num_steps = 10
+  num_steps = 20
   dt = 1e-4
 []
 

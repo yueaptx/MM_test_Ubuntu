@@ -136,10 +136,10 @@ namespace model
 	    {
 		for (int j = 0; j < dim; j++)
 		{
-		    	tempS(i, j) = _sys_sig[i * dim + j]->point_value(_var_sig[i * dim + j]->number(), P, false);
-		    	std::cout << tempS(i, j) << ", ";
+		    	tempS(i, j) = _sys_sig[i * dim + j]->point_value(_var_sig[i * dim + j]->number(), P, false)/161.0e9;
+		    	//std::cout << tempS(i, j) << ", ";
 		}
-		std::cout << std::endl;
+		//std::cout << std::endl;
 	    }    
             return tempS;
         }        

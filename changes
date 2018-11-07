@@ -30,6 +30,18 @@ use_MOOSE = 0;
 
 2. /include/model/DislocationDynamics/DislocationNetwork.h
 
+* line 60
+
+Add 
+
+#include "MOOSEvalues.h"
+
+* line 88 
+
+Add 
+
+MOOSEvalues<dim> mooseValues;
+
 * line 324
 
 Add
@@ -55,3 +67,5 @@ if(seg.network().use_MOOSE)
 {
 
 }
+
+4. Add /include/model/Test/MOOSEvalues.h
